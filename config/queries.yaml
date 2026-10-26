@@ -1,0 +1,105 @@
+# Search terms and collection window shared by every collector.
+# Edit here, then re-run `uv run tenebres collect all`.
+
+study_window:
+  start: "2026-09-15"   # Créteil lycée blockades begin 18 Sept; leave margin
+  end: null             # null = today
+
+# The phrase is written many ways: with/without comma, straight/curly
+# apostrophe, with/without accents, and as a hashtag.
+phrase_variants:
+  - "bismillah c'est les ténèbres"
+  - "bismillah, c'est les ténèbres"
+  - "bismillah c’est les ténèbres"
+  - "bismillah cest les tenebres"
+  - "bismillah c'est les tenebres"
+  - "#bismillahcestlestenebres"
+
+# A post/article counts as a match if its text matches this regex
+# (case-insensitive, accent-insensitive). Used to filter noisy API results.
+# "c'est" is optional: early posts often say "Bismillah les ténèbres".
+match_regex: "bismil+ah?[\\s,.!-]*(c['’ ]?\\s?est\\s+)?les\\s+t[eé]n[eè]bres|bismillah(cest)?lestenebres"
+
+gdelt:
+  # GDELT DOC 2.0 strips punctuation; keyword queries work best.
+  queries:
+    - '"les ténèbres" bismillah'
+    - '"les tenebres" bismillah'
+    - 'bismillah ténèbres'
+
+google_news:
+  queries:
+    - '"bismillah" "ténèbres"'
+    - '"bismillah" "tenebres"'
+  # (country, language) editions of Google News to query.
+  editions:
+    - [FR, fr]
+    - [BE, fr]
+    - [CH, fr]
+    - [CA, fr]
+    - [MA, fr]
+    - [SN, fr]
+    - [US, en]
+    - [GB, en]
+    - [IN, en]
+    - [IT, it]
+    - [DE, de]
+    - [ES, es]
+    - [TR, tr]
+  # Google News caps each query at ~100 items, so query in date slices.
+  slice_days: 2
+
+bluesky:
+  queries:
+    - "bismillah ténèbres"
+    - "bismillah tenebres"
+    - "bismillahcestlestenebres"   # hashtag form; a leading '#' makes the API return 400
+    - "bismillah c'est les ténèbres"
+
+reddit:
+  # Arctic Shift post search works site-wide.
+  post_queries:
+    - "bismillah ténèbres"
+    - "bismillah tenebres"
+  # Comment search requires a subreddit, so we sweep a list.
+  comment_subreddits:
+    - france
+    - French
+    - AskFrance
+    - francophonie
+    - Paris
+    - europe
+    - worldnews
+    - europeanunion
+    - belgium
+    - BelgiumBe
+    - Suisse
+    - Quebec
+    - italy
+    - socialism
+    - Anarchism
+    - FranceDetendue
+    - rance
+    - moi_dlvv
+    - PublicFreakout
+    - 2westerneurope4u
+  comment_query: "bismillah ténèbres"
+
+mastodon:
+  instances:
+    - mastodon.social
+    - piaille.fr
+    - mamot.fr
+    - framapiaf.org
+    - mastodon.top
+  hashtags:
+    - bismillahcestlestenebres
+    - bismillah
+    - tenebres
+    - ténèbres
+
+wikipedia:
+  # Article title per language edition (looked up via langlinks at runtime
+  # from the English title).
+  seed_title: "Bismillah c'est les ténèbres"
+  seed_lang: en

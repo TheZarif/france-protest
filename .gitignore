@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.ipynb_checkpoints/
+
+# Secrets
+.env
+
+# Data: collected data stays local by default (social posts contain user
+# handles; see data/README.md). Share via the team drive instead of git.
+data/raw/*
+data/interim/*
+data/processed/*
+!data/**/.gitkeep
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/
