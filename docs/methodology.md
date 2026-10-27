@@ -21,10 +21,10 @@ The phrase is written many ways (comma or none, ’ or ', accents or none, "c'es
 | Source | Sampling logic | What it represents |
 |---|---|---|
 | Google News RSS | search per edition (13 country × language pairs); ≤100 results per query, sliced by date if capped | Google's *ranked* selection, not a census. It is biased toward outlets Google indexes and ranks well |
-| GDELT DOC 2.0 | keyword queries; daily volume first, then articles per active day (6-h slices if the 250 cap is hit) | GDELT's monitored universe of online news in 65 languages. Its broadest view of non-Western and non-English media |
+| GDELT DOC 2.0 | keyword queries; daily volume first, then articles per active day (6-h slices if the 250 cap is hit). Responses are cached per request so collection can resume across runs | GDELT's monitored universe of online news in 65 languages. Its broadest view of non-Western and non-English media |
 | Bluesky | public search by day; full windows split recursively (unauthenticated search refuses cursors) | close to all public posts containing the search terms |
 | Mastodon | public hashtag timelines on 5 instances | **only hashtagged posts** visible to those instances, so it undercounts |
-| Reddit (Arctic Shift) | site-wide post search; comment search swept across listed subreddits; full threads for matching posts | posts site-wide; comments only in the listed subreddits |
+| Reddit (Arctic Shift) | full-text post and comment search swept across listed subreddits (Arctic Shift no longer allows site-wide text search); site-wide search for posts linking to any of our news articles, whose subreddits then get the same sweep; full threads under every post found | listed + discovered subreddits only. Subreddits where nobody shared one of our articles and that aren't on the list are missed |
 | Wikipedia | langlinks from the English article; pageviews (users only); revision history | public curiosity, and the order in which language communities documented it |
 
 The **study window** starts 15 Sept 2026 (before the Créteil blockades). Timestamps are UTC in raw data. `date` columns are in **Europe/Paris** time.

@@ -2,14 +2,21 @@
 
 Docs: https://github.com/ArthurHeitmann/arctic_shift/blob/master/api/README.md
 
-Arctic Shift mirrors Reddit posts and comments. Post search (`query`, over
-title + selftext) works site-wide; comment full-text search (`body`) needs a
-subreddit, so we sweep the subreddits listed in config/queries.yaml. For
-every matching post we also fetch its full comment tree, since discussion
-of the slogan often happens in threads whose title doesn't contain it.
+Arctic Shift mirrors Reddit posts and comments. Full-text search (`query`
+for posts, `body` for comments) only works within one subreddit, so we sweep
+the subreddits listed in config/queries.yaml. To reach subreddits outside
+that list we also search site-wide by URL (a prefix match) for every news
+article in data/processed/, then give any newly discovered subreddit the same
+text sweep. For every post found we fetch its full comment tree, since
+discussion of the slogan often happens in threads whose title doesn't name it.
 
-Outputs (data/raw/reddit/):
-  posts_*.jsonl          matching submissions
+Arctic Shift throttles heavy users (HTTP 422 "Timeout. Maybe slow down a
+bit"), so every response is cached (data/interim/reddit_cache/) and a run cut
+short by throttling resumes where it stopped when re-run.
+
+Outputs (data/raw/reddit/), written only once every request has succeeded:
+  posts_*.jsonl          posts found by text sweep or URL search
+                         (`matched_by`: "text:<query>" or "url")
   comments_*.jsonl       matching comments (from subreddit sweep)
   threads_*.jsonl        {post_id, comments: [...]} trees under matching posts
 """
@@ -17,24 +24,59 @@ Outputs (data/raw/reddit/):
 from __future__ import annotations
 
 import time
-from datetime import timedelta
+from datetime import date, datetime, timedelta
+from urllib.parse import urlsplit
 
+import pandas as pd
 from tqdm import tqdm
 
-from ..common import get_with_retry, load_config, log, raw_path, session, write_jsonl
+from ..common import (
+    INTERIM, PROCESSED, ResponseCache, get_with_retry, load_config, log, raw_path, session,
+    write_jsonl,
+)
 
 API = "https://arctic-shift.photon-reddit.com/api"
-PAUSE = 1.0
+PAUSE = 2.0
+TIMEOUT_RETRIES = 5  # 422 waits: 30 s, 1, 2, 4, 8 min, then give up for this run
+CHUNK = timedelta(days=7)  # comment full-text search times out on long windows
+CACHE = ResponseCache(INTERIM / "reddit_cache")
+
+
+class Incomplete(RuntimeError):
+    """Arctic Shift stopped answering before every request was made."""
 
 
 def _get(s, path: str, **params) -> list[dict]:
-    r = get_with_retry(s, f"{API}/{path}", params=params, backoff=10, timeout=120)
+    window_end = datetime.fromisoformat(params["before"]) if "before" in params else None
+    key = {"path": path, **params}
+    if (hit := CACHE.get(key, window_end)) is not None:
+        return hit
+    for attempt in range(TIMEOUT_RETRIES):
+        r = s.get(f"{API}/{path}", params=params, timeout=180)
+        if r.status_code != 422:
+            break
+        wait = 30 * 2**attempt
+        log.warning("Arctic Shift timeout on %s, waiting %ds", path, wait)
+        time.sleep(wait)
+    else:
+        raise Incomplete(f"Arctic Shift kept timing out on {path}")
+    if r.status_code == 429 or r.status_code >= 500:  # retry with the shared backoff rules
+        try:
+            r = get_with_retry(s, f"{API}/{path}", params=params, backoff=10, timeout=180)
+        except RuntimeError as e:
+            raise Incomplete(str(e)) from e
     time.sleep(PAUSE)
-    body = r.json()
-    if body.get("error"):
+    try:
+        body = r.json()
+    except ValueError:
+        body = {"error": f"HTTP {r.status_code}: {r.text[:200]}"}
+    if body.get("error"):  # bad parameters, unknown subreddit...: not worth retrying
         log.warning("Arctic Shift error on %s %s: %s", path, params, body["error"])
-        return []
-    return body.get("data") or []
+        data = []
+    else:
+        data = body.get("data") or []
+    CACHE.put(key, data)
+    return data
 
 
 def _search_all(s, path: str, after: str, before: str, **params) -> list[dict]:
@@ -48,37 +90,83 @@ def _search_all(s, path: str, after: str, before: str, **params) -> list[dict]:
         after = str(int(batch[-1]["created_utc"]) + 1)
 
 
+def _chunks(after: str, before: str):
+    t, end = date.fromisoformat(after), date.fromisoformat(before)
+    while t < end:
+        yield str(t), str(min(t + CHUNK, end))
+        t += CHUNK
+
+
+def _article_urls() -> list[str]:
+    """Publisher URLs of the news articles collected so far (query strings dropped)."""
+    urls: set[str] = set()
+    for name, col in (("news_context", "resolved_url"), ("news_articles", "url")):
+        path = PROCESSED / f"{name}.parquet"
+        if path.exists():
+            urls |= set(pd.read_parquet(path, columns=[col])[col].dropna())
+    out = set()
+    for u in urls:
+        parts = urlsplit(u)
+        if parts.netloc.endswith("news.google.com"):
+            continue
+        out.add(f"{parts.scheme}://{parts.netloc}{parts.path}".rstrip("/"))
+    return sorted(u for u in out if 14 <= len(u) <= 500)
+
+
+def _sweep(s, sub: str, rcfg: dict, after: str, before: str, posts: dict, comments: dict) -> None:
+    for q in rcfg["queries"]:
+        for p in _search_all(s, "posts/search", after, before, subreddit=sub, query=q):
+            posts.setdefault(p["id"], {**p, "matched_by": f"text:{q}"})
+        for a, b in _chunks(after, before):
+            for c in _search_all(s, "comments/search", a, b, subreddit=sub, body=q):
+                comments.setdefault(c["id"], c)
+
+
 def collect() -> None:
     cfg = load_config()
+    s = session()
+    n_cached = len(CACHE)
+    if n_cached:
+        log.info("Reddit: resuming with %d cached responses", n_cached)
+    try:
+        posts, comments, threads = _collect(s, cfg)
+    except Incomplete as e:
+        log.error(
+            "Reddit stopped (%s). %d responses cached (%d new this run); "
+            "re-run `tenebres collect reddit` to resume.",
+            e, len(CACHE), len(CACHE) - n_cached,
+        )
+        return
+    write_jsonl(posts.values(), raw_path("reddit", "posts"))
+    write_jsonl(comments.values(), raw_path("reddit", "comments"))
+    write_jsonl(threads, raw_path("reddit", "threads"))
+
+
+def _collect(s, cfg: dict) -> tuple[dict, dict, list]:
     rcfg = cfg["reddit"]
     after = str(cfg["study_window"]["start"])
     before = str(cfg["study_window"]["end"] + timedelta(days=1))
-    s = session()
 
     posts: dict[str, dict] = {}
-    for q in rcfg["post_queries"]:
-        for p in _search_all(s, "posts/search", after, before, query=q):
-            posts.setdefault(p["id"], {**p, "matched_query": q})
-    log.info("Reddit: %d matching posts", len(posts))
-
     comments: dict[str, dict] = {}
-    for sub in tqdm(rcfg["comment_subreddits"], desc="Reddit comment sweep"):
-        try:
-            batch = _search_all(
-                s, "comments/search", after, before, subreddit=sub, body=rcfg["comment_query"]
-            )
-        except Exception as e:  # one dead subreddit shouldn't stop the sweep
-            log.warning("  r/%s failed: %s", sub, e)
-            continue
-        for c in batch:
-            comments.setdefault(c["id"], c)
-    log.info("Reddit: %d matching comments", len(comments))
+    swept = {sub.lower() for sub in rcfg["subreddits"]}
+    for sub in tqdm(rcfg["subreddits"], desc="Reddit subreddit sweep"):
+        _sweep(s, sub, rcfg, after, before, posts, comments)
+    log.info("Reddit sweep: %d posts, %d comments", len(posts), len(comments))
+
+    urls = _article_urls()
+    for u in tqdm(urls, desc="Reddit URL search"):
+        for p in _get(s, "posts/search", url=u, after=after, before=before, limit=100):
+            posts.setdefault(p["id"], {**p, "matched_by": "url"})
+    found = sorted({p["subreddit"] for p in posts.values()}, key=str.lower)
+    new_subs = [sub for sub in found if sub.lower() not in swept]
+    log.info("Reddit URL search: %d article URLs, %d new subreddits", len(urls), len(new_subs))
+    for sub in tqdm(new_subs, desc="Reddit sweep (discovered)"):
+        _sweep(s, sub, rcfg, after, before, posts, comments)
+    log.info("Reddit: %d posts, %d comments", len(posts), len(comments))
 
     threads = []
     for pid in tqdm(posts, desc="Reddit threads"):
         tree = _get(s, "comments/tree", link_id=pid, limit=25000)
         threads.append({"post_id": pid, "comments": tree})
-
-    write_jsonl(posts.values(), raw_path("reddit", "posts"))
-    write_jsonl(comments.values(), raw_path("reddit", "comments"))
-    write_jsonl(threads, raw_path("reddit", "threads"))
+    return posts, comments, threads

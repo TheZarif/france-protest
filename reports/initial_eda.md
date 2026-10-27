@@ -87,7 +87,7 @@ The slogan itself skews the models. On its own it scores 88% "positive" and 20% 
 
 ## 5. Open questions for the next round
 
-1. **Fill the news gap with GDELT** (`scripts/retry_when_up.sh` is running; or collect from another network). Then redo the country and leaning analysis on a much larger, less Google-curated sample, and add GDELT tone.
+1. **Fill the news gap with GDELT** (the collector now resumes across runs, so re-run it until it finishes, ideally from another network). Then redo the country and leaning analysis on a much larger, less Google-curated sample, and add GDELT tone.
 2. **Reddit** (r/france, r/rance, r/moi_dlvv, r/europe…): does the French Reddit "meme" culture match Bluesky's, or skew differently?
 3. **The origin platforms.** Apply for the TikTok Research API / Meta Content Library, or hand-collect seed posts, to trace the 1–5 Oct jump from Snapchat to TikTok/Instagram/X.
 4. **Validate outlet leanings** with a documented source and a second coder, and code the ~30 uncoded domains.

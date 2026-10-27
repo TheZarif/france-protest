@@ -37,10 +37,10 @@ Collect a single source with e.g. `uv run tenebres collect bluesky`. Re-running 
 |---|---|---|---|
 | **Google News** (RSS) | headlines, outlet, date; 13 country/language editions | no key | ✅ 132 unique articles |
 | **News article text** | full text + slogan context window (via trafilatura) | no key | ✅ 114 of 132 fetched (rest paywalled or bot-blocked) |
-| **GDELT DOC 2.0** | global news in 65 languages, volume/tone/country timelines | no key, 1 req / 5 s | ⏳ API rate-limiting our IP; retry with `scripts/retry_when_up.sh` |
+| **GDELT DOC 2.0** | global news in 65 languages, volume/tone/country timelines | no key, 1 req / 5 s | ⏳ API rate-limiting our IP; the collector caches each response and resumes, so re-run it (or `scripts/retry_when_up.sh 12 gdelt`) until it finishes |
 | **Bluesky** | posts, engagement, author follower counts, repost and quote cascades | no key | ✅ 1,091 matching posts, 3,687 cascade edges |
 | **Mastodon** | public hashtag timelines from 5 large instances | no key | ✅ 118 matching posts |
-| **Reddit** via [Arctic Shift](https://github.com/ArthurHeitmann/arctic_shift) | posts, comments, full threads | no key | ⏳ Arctic Shift was down; retry script will collect it |
+| **Reddit** via [Arctic Shift](https://github.com/ArthurHeitmann/arctic_shift) | posts, comments, full threads (subreddit sweep + site-wide search for our news URLs) | no key | ⏳ Arctic Shift is throttling our IP (HTTP 422); the collector caches each response and resumes, so re-run it (or `scripts/retry_when_up.sh 24 reddit`) until it finishes |
 | **Wikipedia** | article creation per language, edit history, daily pageviews | no key | ✅ 5 language editions |
 
 Not (yet) covered: **TikTok, Instagram, Snapchat, X**, where the slogan actually originated and spread most. These need research API access or paid tools; see [methodology § gaps](docs/methodology.md#known-gaps-and-biases).
@@ -77,6 +77,6 @@ data/                 NOT in git: raw/, interim/, processed/  (see data/README.m
 
 ## Troubleshooting
 
-- **GDELT returns HTTP 429** even at one request every 5 s: GDELT throttles by IP, and shared networks (university, VPN) are often blocked for hours. Run `scripts/retry_when_up.sh`, or collect from another network.
-- **Arctic Shift returns 530/1033:** the service is temporarily down. Same script.
+- **GDELT returns HTTP 429** even at one request every 5 s: GDELT throttles by IP, and shared networks (university, VPN) are often blocked for hours. Every successful response is cached in `data/interim/gdelt_cache/` (Reddit: `reddit_cache/`), so just re-run `uv run tenebres collect gdelt` later (or leave `scripts/retry_when_up.sh 12 gdelt` running): each run picks up where the last stopped, and the output files appear once every request has succeeded. Collecting from another network also helps.
+- **Arctic Shift returns 530/1033:** the service is temporarily down; run `scripts/retry_when_up.sh 4 reddit`. A **422 "Timeout. Maybe slow down a bit"** means it is busy; the collector waits and retries on its own. Full-text search only works within a subreddit, so add subreddits to `config/queries.yaml` to widen the sweep.
 - **Bluesky returns 403 on paging:** unauthenticated search only serves first pages. The collector works around this by splitting time windows, so no action is needed.

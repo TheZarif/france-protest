@@ -22,10 +22,11 @@ match_regex: "bismil+ah?[\\s,.!-]*(c['’ ]?\\s?est\\s+)?les\\s+t[eé]n[eè]bres
 
 gdelt:
   # GDELT DOC 2.0 strips punctuation; keyword queries work best.
+  # One OR query covers the accented and unaccented spellings (and is a
+  # superset of '"les ténèbres" bismillah'). GDELT throttles us hard, so each
+  # extra query multiplies the number of requests.
   queries:
-    - '"les ténèbres" bismillah'
-    - '"les tenebres" bismillah'
-    - 'bismillah ténèbres'
+    - 'bismillah (ténèbres OR tenebres)'
 
 google_news:
   queries:
@@ -57,12 +58,13 @@ bluesky:
     - "bismillah c'est les ténèbres"
 
 reddit:
-  # Arctic Shift post search works site-wide.
-  post_queries:
-    - "bismillah ténèbres"
-    - "bismillah tenebres"
-  # Comment search requires a subreddit, so we sweep a list.
-  comment_subreddits:
+  # Arctic Shift full-text search only works within a subreddit, so we sweep
+  # this list (plus subreddits found by searching for the news articles' URLs).
+  # Queries are deliberately broad; `process` keeps rows with both keywords.
+  queries:
+    - bismillah
+    - bismilah
+  subreddits:
     - france
     - French
     - AskFrance
@@ -83,7 +85,6 @@ reddit:
     - moi_dlvv
     - PublicFreakout
     - 2westerneurope4u
-  comment_query: "bismillah ténèbres"
 
 mastodon:
   instances:

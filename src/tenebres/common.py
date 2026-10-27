@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
 import re
 import time
 import unicodedata
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable
 
@@ -70,6 +71,49 @@ def get_with_retry(
             continue
         time.sleep(backoff * 2**attempt)
     raise RuntimeError(f"giving up on {url} after {tries} attempts")
+
+
+class ResponseCache:
+    """One JSON file per API request, so a rate-limited collection can resume.
+
+    Sources keep adding items for recent hours, so a response whose window
+    ended less than `settle` before it was fetched is only reused for
+    `stale_after`; responses for older windows are reused indefinitely.
+    Pass window_end=None for requests with no time window (always "recent").
+    """
+
+    def __init__(self, directory: Path, settle=timedelta(hours=6), stale_after=timedelta(hours=12)):
+        self.dir, self.settle, self.stale_after = directory, settle, stale_after
+
+    @staticmethod
+    def _now() -> datetime:
+        return datetime.now(timezone.utc).replace(tzinfo=None)
+
+    def _file(self, params: dict) -> Path:
+        key = json.dumps(params, sort_keys=True, ensure_ascii=False, default=str)
+        return self.dir / f"{hashlib.sha1(key.encode()).hexdigest()}.json"
+
+    def __len__(self) -> int:
+        return len(list(self.dir.glob("*.json"))) if self.dir.exists() else 0
+
+    def get(self, params: dict, window_end: datetime | None):
+        path = self._file(params)
+        if not path.exists():
+            return None
+        entry = json.loads(path.read_text())
+        fetched = datetime.fromisoformat(entry["fetched_at"])
+        unsettled = window_end is None or window_end > fetched - self.settle
+        if unsettled and self._now() - fetched > self.stale_after:
+            return None
+        return entry["response"]
+
+    def put(self, params: dict, response) -> None:
+        self.dir.mkdir(parents=True, exist_ok=True)
+        path = self._file(params)
+        entry = {"params": params, "fetched_at": self._now().isoformat(), "response": response}
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(entry, ensure_ascii=False, default=str))
+        tmp.replace(path)
 
 
 def strip_accents(text: str) -> str:
