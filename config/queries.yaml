@@ -18,20 +18,36 @@ phrase_variants:
 # A post/article counts as a match if its text matches this regex
 # (case-insensitive, accent-insensitive). Used to filter noisy API results.
 # "c'est" is optional: early posts often say "Bismillah les ténèbres".
-match_regex: "bismil+ah?[\\s,.!-]*(c['’ ]?\\s?est\\s+)?les\\s+t[eé]n[eè]bres|bismillah(cest)?lestenebres"
+# Also matches the common translations used by foreign coverage:
+#   English  "Bismillah / In the name of God (Allah), it's (the) darkness"
+#   Arabic   "بسم الله، إنه الظلام" / "بسم الله، إنها الظلمات"
+match_regex: "bismil+ah?[\\s,.!-]*(c['’ ]?\\s?est\\s+)?les\\s+t[eé]n[eè]bres|bismillah(cest)?lestenebres\
+  |(bismil+ah?|in\\s+the\\s+name\\s+of\\s+(god|allah))[\\s,.!:-]*it(['’]s|\\s+is)\\s+(the\\s+)?darkness(es)?\
+  |با?سم\\s*الله[\\s،,.!:-]*(إنه|إنها|انه|انها)\\s+(ال)?(ظلام|ظلمات)"
+
+# Looser test used to decide whether a news article is about the slogan at all
+# (Google News also returns off-topic items): "bismillah" in Latin, Arabic or
+# Bengali script, or "in the name of God" in the languages we see translations in.
+mention_regex: "bismil+ah?|بسم الله|باسم الله|বিসমিল্লাহ|in the name of (god|allah)|im namen gottes|au nom de dieu|in nome di dio|en el nombre de dios|em nome de deus"
 
 gdelt:
   # GDELT DOC 2.0 strips punctuation; keyword queries work best.
-  # One OR query covers the accented and unaccented spellings (and is a
-  # superset of '"les ténèbres" bismillah'). GDELT throttles us hard, so each
-  # extra query multiplies the number of requests.
+  # GDELT searches the *English machine translation* of non-English articles,
+  # so French keywords only match English articles quoting the slogan. The
+  # English query catches translated French (and other) coverage. GDELT
+  # throttles us hard, so each extra query multiplies the number of requests.
   queries:
-    - 'bismillah (ténèbres OR tenebres)'
+    - 'bismillah (ténèbres OR tenebres)'   # English articles quoting the French
+    - 'bismillah darkness'                  # translations of the slogan
 
 google_news:
   queries:
     - '"bismillah" "ténèbres"'
     - '"bismillah" "tenebres"'
+    - '"bismillah" darkness'            # English translations
+    - '"in the name of god" darkness'
+    - '"بسم الله إنه الظلام"'           # Arabic translations
+    - '"بسم الله إنها الظلمات"'
   # (country, language) editions of Google News to query.
   editions:
     - [FR, fr]
@@ -47,6 +63,16 @@ google_news:
     - [DE, de]
     - [ES, es]
     - [TR, tr]
+    - [EG, ar]
+    - [MA, ar]
+    - [SA, ar]
+    - [ID, id]
+    - [BR, pt-419]
+    - [PT, pt-150]
+    - [NL, nl]
+    - [BE, nl]
+    - [BD, bn]
+    - [PK, en]
   # Google News caps each query at ~100 items, so query in date slices.
   slice_days: 2
 
@@ -56,14 +82,17 @@ bluesky:
     - "bismillah tenebres"
     - "bismillahcestlestenebres"   # hashtag form; a leading '#' makes the API return 400
     - "bismillah c'est les ténèbres"
+    - "bismillah darkness"                     # English translations
+    - "\"in the name of god\" darkness"
 
 reddit:
   # Arctic Shift full-text search only works within a subreddit, so we sweep
   # this list (plus subreddits found by searching for the news articles' URLs).
   # Queries are deliberately broad; `process` keeps rows with both keywords.
+  # Arctic Shift throttles hard, so a single query; add "bismilah" (a common
+  # misspelling) when there is time for a second pass.
   queries:
     - bismillah
-    - bismilah
   subreddits:
     - france
     - French
@@ -97,6 +126,19 @@ mastodon:
     - bismillahcestlestenebres
     - bismillah
     - tenebres
+    - ténèbres
+
+lemmy:
+  # Lemmy instances federate, so a few large ones see most public posts.
+  # jlai.lu is the main francophone instance (a Reddit alternative).
+  instances:
+    - jlai.lu
+    - lemmy.world
+    - sh.itjust.works
+    - lemmy.ml
+    - feddit.org
+  queries:
+    - bismillah
     - ténèbres
 
 wikipedia:

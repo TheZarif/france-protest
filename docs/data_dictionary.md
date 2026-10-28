@@ -28,7 +28,8 @@ Google News and GDELT results are merged. Two rows with the same domain and the 
 | `url` | join key to `news_articles.url` |
 | `resolved_url` | publisher URL after decoding Google redirects |
 | `text_chars` | length of extracted main text |
-| `body_has_phrase` | body contains the slogan |
+| `body_has_phrase` | body contains the slogan (French or translated) |
+| `body_mentions` | body mentions "bismillah" in some form (`mention_regex`) |
 | `n_mentions` | number of mentions |
 | `first_context`, `all_contexts` | ±300-character windows around each mention (`|||`-separated) |
 
@@ -36,23 +37,24 @@ Google News and GDELT results are merged. Two rows with the same domain and the 
 
 | Column | Meaning |
 |---|---|
+| `on_topic` | headline mentions the slogan or "bismillah", or the body contains the slogan, or the body couldn't be fetched (see methodology § 6). The notebook analyses on-topic rows only |
 | `title_masked`, `context_masked` | text with the slogan replaced by `«slogan»` (model input) |
 | `title_sent_*`, `ctx_sent_*` | `negative`/`neutral`/`positive` probabilities, `score` = pos − neg, `label` = argmax |
 
 ## `social_posts`: one row per post or comment mentioning the slogan
 
-Covers Bluesky, Reddit and Mastodon. A row is kept if it contains both "bismil…" and "ténèbre…" (accent-insensitive) and was posted after the study-window start.
+Covers Bluesky, Reddit, Mastodon and Lemmy. A row is kept if it contains both "bismil…" and "ténèbre…" (accent-insensitive) or a full English/Arabic translation of the slogan, and was posted after the study-window start.
 
 | Column | Meaning |
 |---|---|
-| `platform` | `bluesky`, `reddit`, `mastodon` |
+| `platform` | `bluesky`, `reddit`, `mastodon`, `lemmy` |
 | `date`, `created_at` | Europe/Paris date; UTC timestamp |
 | `author`, `author_name` | handle / display name (**personal data: do not publish**) |
 | `author_followers` | follower count at collection time (Bluesky, Mastodon) |
-| `community` | subreddit (Reddit), home instance (Mastodon) |
+| `community` | subreddit (Reddit), home instance (Mastodon), community@instance (Lemmy) |
 | `lang` | language tags declared by the post (Bluesky, Mastodon) |
 | `text` | post text (Reddit posts: title + body) |
-| `phrase_exact` | full slogan in sequence (vs. both keywords anywhere) |
+| `phrase_exact` | full slogan in sequence, in French or an English/Arabic translation (vs. both keywords anywhere) |
 | `likes`, `reposts`, `replies`, `quotes` | counts at collection time (Reddit: `likes` = score) |
 | `engagement` | sum of the four |
 | `is_reply`, `parent_id` | reply flag and parent post id |

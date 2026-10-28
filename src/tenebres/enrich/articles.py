@@ -72,7 +72,7 @@ def run() -> None:
     cache.to_parquet(cache_path, index=False)
 
     pattern = re.compile(strip_accents(cfg["match_regex"]), re.IGNORECASE)
-    loose = re.compile(r"bismil+ah?", re.IGNORECASE)
+    loose = re.compile(strip_accents(cfg["mention_regex"]), re.IGNORECASE)
     rows = []
     for r in cache.itertuples():
         text = r.text or ""
@@ -83,6 +83,7 @@ def run() -> None:
                 "resolved_url": r.resolved_url,
                 "text_chars": len(text),
                 "body_has_phrase": bool(pattern.search(strip_accents(text))),
+                "body_mentions": bool(loose.search(strip_accents(text))),
                 "n_mentions": len(ctx),
                 "first_context": ctx[0] if ctx else "",
                 "all_contexts": " ||| ".join(ctx),

@@ -11,19 +11,20 @@ How the data is gathered, what each derived variable means, and the limits to ke
 
 ## 2. Matching the slogan
 
-The phrase is written many ways (comma or none, ’ or ', accents or none, "c'est" dropped, hashtag form). All variants live in [`config/queries.yaml`](../config/queries.yaml):
+The phrase is written many ways (comma or none, ’ or ', accents or none, "c'est" dropped, hashtag form), and foreign coverage often **translates** it: in English *"Bismillah / In the name of God, it's (the) darkness"*, in Arabic *"بسم الله، إنه الظلام"* or *"بسم الله، إنها الظلمات"*. All variants live in [`config/queries.yaml`](../config/queries.yaml):
 
-- **Search queries** are deliberately broad (e.g. `bismillah ténèbres`).
-- **Matching**: after collection a post is kept if its text contains both `bismil…` and `ténèbre…` (accent-insensitive, `keyword_match`). The stricter `phrase_exact` flag marks the full slogan in sequence (regex `match_regex`, which makes "c'est" optional).
+- **Search queries** are deliberately broad (e.g. `bismillah ténèbres`), plus English and Arabic translations for Google News and Bluesky.
+- **Matching**: after collection a post is kept if its text contains both `bismil…` and `ténèbre…` (accent-insensitive), or a full translated rendering (`keyword_match`). The stricter `phrase_exact` flag marks the full slogan in sequence, in French or translation (regex `match_regex`, which makes "c'est" optional). The same regex drives the headline/body flags, context windows and masking.
 
 ## 3. Sources and sampling
 
 | Source | Sampling logic | What it represents |
 |---|---|---|
-| Google News RSS | search per edition (13 country × language pairs); ≤100 results per query, sliced by date if capped | Google's *ranked* selection, not a census. It is biased toward outlets Google indexes and ranks well |
-| GDELT DOC 2.0 | keyword queries; daily volume first, then articles per active day (6-h slices if the 250 cap is hit). Responses are cached per request so collection can resume across runs | GDELT's monitored universe of online news in 65 languages. Its broadest view of non-Western and non-English media |
+| Google News RSS | search per edition (23 country × language pairs, incl. Arabic, Indonesian, Portuguese, Dutch, Bengali); ≤100 results per query, sliced by date if capped | Google's *ranked* selection, not a census. It is biased toward outlets Google indexes and ranks well |
+| GDELT DOC 2.0 | keyword queries; daily volume first, then articles per active day (6-h slices if the 250 cap is hit). Responses are cached per request so collection can resume across runs. **GDELT searches the English machine translation of non-English articles**, so French-keyword queries only match English articles quoting the slogan; the English query `bismillah darkness` reaches translated coverage | GDELT's monitored universe of online news in 65 languages. Its broadest view of non-Western and non-English media |
 | Bluesky | public search by day; full windows split recursively (unauthenticated search refuses cursors) | close to all public posts containing the search terms |
 | Mastodon | public hashtag timelines on 5 instances | **only hashtagged posts** visible to those instances, so it undercounts |
+| Lemmy | public search on 5 federated instances (incl. francophone jlai.lu), posts and comments | the federated Reddit alternative; small, tech-leaning |
 | Reddit (Arctic Shift) | full-text post and comment search swept across listed subreddits (Arctic Shift no longer allows site-wide text search); site-wide search for posts linking to any of our news articles, whose subreddits then get the same sweep; full threads under every post found | listed + discovered subreddits only. Subreddits where nobody shared one of our articles and that aren't on the list are missed |
 | Wikipedia | langlinks from the English article; pageviews (users only); revision history | public curiosity, and the order in which language communities documented it |
 
@@ -65,14 +66,16 @@ The slogan itself moves both models. On its own it scores **P(positive) = 0.88**
 Model scores need validation against a hand-coded sample (suggested: 200 posts and 50 article contexts, stratified by language) before they are reported.
 
 ### Topic modelling
-BERTopic with `paraphrase-multilingual-MiniLM-L12-v2` embeddings, UMAP with a fixed seed, HDBSCAN (`min_topic_size=12`). Input = social posts with the slogan masked and links removed, keeping posts with ≥4 remaining words (960 of 1,209). Topic labels are c-TF-IDF keywords with French and English stop words and the slogan's own words removed. Topics are **exploratory**: check stability across seeds and `min_topic_size` before interpreting.
+BERTopic with `paraphrase-multilingual-MiniLM-L12-v2` embeddings, UMAP with a fixed seed, HDBSCAN (`min_topic_size=12`). Input = social posts with the slogan masked and links removed, keeping posts with ≥4 remaining words and dropping exact duplicates (972 of 1,268). Without de-duplication, copy-pasted shares form one dense cluster and HDBSCAN lumps everything else into a single topic. Topic labels are c-TF-IDF keywords with French and English stop words and the slogan's own words removed. Topics are **exploratory**: check stability across seeds and `min_topic_size` before interpreting.
 
 ## 6. Known gaps and biases
 
 - **The origin platforms are missing.** The slogan was born on Snapchat and spread mostly on TikTok, Instagram and X, none of which we can search freely. Options: TikTok Research API (academic application), Meta Content Library (via ICPSR/SOMAR), X API (paid), Junkipedia, or manual collection of seed posts. Our "first appearances" are **first appearances on observable platforms**.
-- **Bluesky and Mastodon skew left, educated and francophone-urban** compared with the general public. Their sentiment and framing are not "public opinion".
-- **Google News is a ranked sample.** Querying 13 editions brings in non-French outlets (58% of articles), but coverage of small, far-right and non-Western outlets is still thin. GDELT should broaden this once collected.
-- **Paywalls and bot-blocking**: 18 of 132 articles (e.g. Le Parisien, Libération, Ouest-France, NYT) could not be fetched. Their framing is coded from headlines only.
+- **Bluesky, Mastodon and Lemmy skew left, educated and francophone-urban** compared with the general public. Their sentiment and framing are not "public opinion".
+- **Google News is a ranked sample.** Querying 23 editions brings in non-French outlets (58% of articles), but coverage of small, far-right and non-Western outlets is still thin. GDELT should broaden this once collected.
+- **Paywalls and bot-blocking**: 17 of 203 articles (e.g. Le Parisien, Libération, Ouest-France, NYT) could not be fetched. Their framing is coded from headlines only, and they are kept as on-topic because they can't be ruled out.
+- **Off-topic news**: Google News also returns items that never mention the slogan. `news_scored.on_topic` is true when the headline mentions the slogan or "bismillah" in some form (`mention_regex`), or the fetched body contains the slogan itself (`match_regex`); 13 of 203 are excluded. Body mentions of a bare "bismillah" don't count, since in Arabic and Persian texts it is often just a religious formula. Translations the regex doesn't know (e.g. one Arabic article's *"الظلام يعم المكان"*) can be lost.
+- **Translations vary by outlet** (see § 2), so keyword tracking across languages is incomplete. Add new renderings to `match_regex` as they turn up.
 - **Google News timestamps** are often day-level (shown as 07:00 UTC), so ordering within a day is unreliable.
 - **Search results drift.** Platforms delete posts and re-rank results, so collection runs at different times differ. Archive raw snapshots.
 

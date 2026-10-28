@@ -13,7 +13,7 @@ import argparse
 import importlib
 import logging
 
-SOURCES = ["gdelt", "google_news", "bluesky", "reddit", "mastodon", "wikipedia"]
+SOURCES = ["gdelt", "google_news", "bluesky", "reddit", "mastodon", "lemmy", "wikipedia"]
 
 
 def main() -> None:

@@ -21,6 +21,7 @@ SOURCE_COLORS = {
     "mastodon": SERIES[2],
     "wikipedia": SERIES[3],
     "reddit": SERIES[4],
+    "lemmy": SERIES[5],
     "gdelt": SERIES[6],
 }
 

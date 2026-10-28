@@ -23,9 +23,11 @@ Outputs (data/processed/):
 
 from __future__ import annotations
 
+import re
+
 import pandas as pd
 
-from ..common import PROCESSED, load_config, log, mask_slogan
+from ..common import PROCESSED, load_config, log, mask_slogan, strip_accents
 
 SENTIMENT_MODEL = "cardiffnlp/twitter-xlm-roberta-base-sentiment"
 TOXICITY_MODEL = "citizenlab/distilbert-base-multilingual-cased-toxicity"
@@ -77,7 +79,18 @@ def run() -> None:
     ctx_path = PROCESSED / "news_context.parquet"
     if ctx_path.exists():
         news = news.merge(pd.read_parquet(ctx_path), on="url", how="left")
-    log.info("scoring %d news articles", len(news))
+    # Google News also returns off-topic items. On topic = the headline mentions
+    # the slogan or "bismillah" in some form, or the body contains the slogan
+    # itself (a bare "bismillah" in a body is often just a religious formula).
+    mentions = re.compile(strip_accents(cfg["mention_regex"]), re.IGNORECASE)
+    on_topic = news["title_has_phrase"] | news["title"].fillna("").map(
+        lambda t: bool(mentions.search(strip_accents(t)))
+    )
+    if "body_has_phrase" in news:  # unfetched bodies (paywalls) can't rule an article out
+        on_topic |= news["body_has_phrase"].fillna(False).astype(bool)
+        on_topic |= news["text_chars"].isna()
+    news["on_topic"] = on_topic
+    log.info("scoring %d news articles (%d on topic)", len(news), on_topic.sum())
     news["title_masked"] = news["title"].map(lambda t: mask_slogan(t, cfg))
     news = _add_sentiment(news, "title_masked", sent, "title_sent")
     if "first_context" in news:

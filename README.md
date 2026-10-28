@@ -33,13 +33,14 @@ Collect a single source with e.g. `uv run tenebres collect bluesky`. Re-running 
 
 ## Data sources
 
-| Source | What we get | Access | Status (26 Oct 2026) |
+| Source | What we get | Access | Status (28 Oct 2026) |
 |---|---|---|---|
-| **Google News** (RSS) | headlines, outlet, date; 13 country/language editions | no key | ✅ 132 unique articles |
-| **News article text** | full text + slogan context window (via trafilatura) | no key | ✅ 114 of 132 fetched (rest paywalled or bot-blocked) |
+| **Google News** (RSS) | headlines, outlet, date; 23 country/language editions, French + English/Arabic translated queries | no key | ✅ 203 collected, 190 on topic, 35 countries |
+| **News article text** | full text + slogan context window (via trafilatura) | no key | ✅ 186 of 203 fetched (rest paywalled or bot-blocked) |
 | **GDELT DOC 2.0** | global news in 65 languages, volume/tone/country timelines | no key, 1 req / 5 s | ⏳ API rate-limiting our IP; the collector caches each response and resumes, so re-run it (or `scripts/retry_when_up.sh 12 gdelt`) until it finishes |
-| **Bluesky** | posts, engagement, author follower counts, repost and quote cascades | no key | ✅ 1,091 matching posts, 3,687 cascade edges |
-| **Mastodon** | public hashtag timelines from 5 large instances | no key | ✅ 118 matching posts |
+| **Bluesky** | posts, engagement, author follower counts, repost and quote cascades | no key | ✅ 1,136 matching posts, 3,699 cascade edges |
+| **Mastodon** | public hashtag timelines from 5 large instances | no key | ✅ 120 matching posts |
+| **Lemmy** | posts and comments via public search on 5 federated instances (incl. francophone jlai.lu) | no key | ✅ 12 matching posts and comments |
 | **Reddit** via [Arctic Shift](https://github.com/ArthurHeitmann/arctic_shift) | posts, comments, full threads (subreddit sweep + site-wide search for our news URLs) | no key | ⏳ Arctic Shift is throttling our IP (HTTP 422); the collector caches each response and resumes, so re-run it (or `scripts/retry_when_up.sh 24 reddit`) until it finishes |
 | **Wikipedia** | article creation per language, edit history, daily pageviews | no key | ✅ 5 language editions |
 
@@ -52,7 +53,7 @@ config/
   queries.yaml        search terms, variants, study window, per-source settings  ← edit me
   outlets.csv         outlet coding: country, media type, political leaning, owner ← review me
 src/tenebres/
-  collect/            one module per source (gdelt, google_news, bluesky, reddit, mastodon, wikipedia)
+  collect/            one module per source (gdelt, google_news, bluesky, reddit, mastodon, lemmy, wikipedia)
   process.py          raw -> tidy tables
   enrich/articles.py  fetch article text, extract slogan context
   enrich/nlp.py       sentiment + toxicity models

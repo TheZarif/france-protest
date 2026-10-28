@@ -282,10 +282,39 @@ def _mastodon() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _lemmy() -> pd.DataFrame:
+    def host(actor_id: str) -> str:
+        return urlparse(actor_id or "").netloc
+
+    rows = []
+    for v in _latest("lemmy", "posts"):
+        p, c = v["post"], v["community"]
+        rows.append({
+            "platform": "lemmy", "post_id": p["ap_id"], "url": p["ap_id"],
+            "author": f"{v['creator']['name']}@{host(v['creator']['actor_id'])}",
+            "created_at": p["published"],
+            "text": f"{p.get('name', '')}\n\n{p.get('body') or ''}".strip(),
+            "likes": v["counts"].get("score"), "replies": v["counts"].get("comments"),
+            "is_reply": False, "community": f"{c['name']}@{host(c['actor_id'])}",
+            "link_domain": _domain(p.get("url")) if p.get("url") else None,
+        })
+    for v in _latest("lemmy", "comments"):
+        cm, c = v["comment"], v["community"]
+        rows.append({
+            "platform": "lemmy", "post_id": cm["ap_id"], "url": cm["ap_id"],
+            "author": f"{v['creator']['name']}@{host(v['creator']['actor_id'])}",
+            "created_at": cm["published"], "text": cm.get("content", ""),
+            "likes": v["counts"].get("score"), "replies": v["counts"].get("child_count"),
+            "is_reply": True, "parent_id": v["post"]["ap_id"],
+            "community": f"{c['name']}@{host(c['actor_id'])}",
+        })
+    return pd.DataFrame(rows)
+
+
 def build_social(cfg: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
     matches = phrase_matcher(cfg)
     bsky, edges = _bluesky()
-    df = pd.concat([bsky, _reddit(), _mastodon()], ignore_index=True)
+    df = pd.concat([bsky, _reddit(), _mastodon(), _lemmy()], ignore_index=True)
     if df.empty:
         return df, edges
     ts = df["created_at"]
@@ -296,7 +325,8 @@ def build_social(cfg: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
 
     flat = df["text"].fillna("").map(strip_accents).str.lower()
     df["phrase_exact"] = df["text"].map(matches)
-    df["keyword_match"] = flat.str.contains("bismil") & flat.str.contains("tenebre")
+    # Both French keywords anywhere, or a full translated rendering of the slogan.
+    df["keyword_match"] = (flat.str.contains("bismil") & flat.str.contains("tenebre")) | df["phrase_exact"]
     df = df[df["keyword_match"]].copy()
 
     window_start = pd.Timestamp(cfg["study_window"]["start"], tz="UTC")

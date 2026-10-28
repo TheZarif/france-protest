@@ -28,6 +28,7 @@ from datetime import date, datetime, timedelta
 from urllib.parse import urlsplit
 
 import pandas as pd
+import requests
 from tqdm import tqdm
 
 from ..common import (
@@ -36,8 +37,10 @@ from ..common import (
 )
 
 API = "https://arctic-shift.photon-reddit.com/api"
-PAUSE = 2.0
-TIMEOUT_RETRIES = 5  # 422 waits: 30 s, 1, 2, 4, 8 min, then give up for this run
+PAUSE = 10.0
+# Arctic Shift answers 422 "Timeout. Maybe slow down a bit" for a while after a
+# heavy search. Waits: 1, 2, 4, 8, 15, 15, 15, 15 min (~75 min), then give up.
+TIMEOUT_WAITS = [60, 120, 240, 480, 900, 900, 900, 900]
 CHUNK = timedelta(days=7)  # comment full-text search times out on long windows
 CACHE = ResponseCache(INTERIM / "reddit_cache")
 
@@ -51,12 +54,15 @@ def _get(s, path: str, **params) -> list[dict]:
     key = {"path": path, **params}
     if (hit := CACHE.get(key, window_end)) is not None:
         return hit
-    for attempt in range(TIMEOUT_RETRIES):
-        r = s.get(f"{API}/{path}", params=params, timeout=180)
-        if r.status_code != 422:
-            break
-        wait = 30 * 2**attempt
-        log.warning("Arctic Shift timeout on %s, waiting %ds", path, wait)
+    for wait in TIMEOUT_WAITS:
+        try:
+            r = s.get(f"{API}/{path}", params=params, timeout=180)
+        except requests.RequestException as e:
+            log.warning("Arctic Shift connection error on %s (%s), waiting %ds", path, e, wait)
+        else:
+            if r.status_code != 422:
+                break
+            log.warning("Arctic Shift timeout on %s, waiting %ds", path, wait)
         time.sleep(wait)
     else:
         raise Incomplete(f"Arctic Shift kept timing out on {path}")
